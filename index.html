@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Busur Kamera Interaktif 90°</title>
+  <style>
+    /* Reset dan pengaturan dasar layar penuh */
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      font-family: sans-serif;
+      touch-action: none;
+      /* Mencegah layar ikut terscroll saat menggeser busur */
+    }
+
+    /* Video Kamera sebagai Background */
+    #kamera-bg {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    /* Area kerja SVG untuk Busur */
+    #area-busur {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vw;
+      max-height: 100vh;
+      z-index: 2;
+    }
+
+    /* Panel Info Sudut diperkecil dan dipindah ke dekat pusat (kiri bawah) */
+    .info-panel {
+      position: absolute;
+      bottom: 40px;
+      /* Posisi di atas pivot agar tidak menumpuk pas di jempol */
+      left: 40px;
+      background: rgba(0, 0, 0, 0.6);
+      color: #00ffcc;
+      padding: 8px 12px;
+      border-radius: 8px;
+      z-index: 3;
+      border: 1px solid rgba(0, 255, 204, 0.3);
+      pointer-events: none;
+      /* Agar sentuhan jari tembus ke busur di bawahnya */
+      text-align: left;
+    }
+
+    #nilai-sudut {
+      font-size: 20px;
+      /* Ukuran angka lebih kecil */
+      font-weight: bold;
+    }
+
+    .petunjuk {
+      font-size: 9px;
+      /* Ukuran teks petunjuk diperkecil maksimal */
+      color: #ccc;
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+
+<body>
+
+  <video id="kamera-bg" autoplay playsinline></video>
+
+  <div class="info-panel">
+    <div id="nilai-sudut">45.0°</div>
+    <div class="petunjuk">Sentuh & geser garis merah</div>
+  </div>
+
+  <svg id="area-busur" viewBox="0 0 100 100" preserveAspectRatio="xMinYMax meet">
+    <path d="M 10,90 A 80,80 0 0 1 90,10" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="0.5" />
+
+    <line x1="10" y1="90" x2="95" y2="90" stroke="white" stroke-width="0.8" />
+    <line x1="10" y1="90" x2="10" y2="5" stroke="white" stroke-width="0.8" />
+
+    <g id="garis-skala"></g>
+
+    <line id="jarum" x1="10" y1="90" x2="66.5" y2="33.5" stroke="#ff3366" stroke-width="1.2" stroke-linecap="round" />
+    <circle cx="10" cy="90" r="2" fill="#ff3366" />
+  </svg>
+
+  <script>
+    const video = document.getElementById('kamera-bg');
+    const svgArea = document.getElementById('area-busur');
+    const jarum = document.getElementById('jarum');
+    const teksSudut = document.getElementById('nilai-sudut');
+    const grupSkala = document.getElementById('garis-skala');
+    // 1. Mengaktifkan Kamera Belakang
+    async function mulaiKamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment"
+          }
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        alert("Gagal mengakses kamera. Pastikan browser memiliki izin akses kamera.");
+      }
+    }
+    // 2. Logika Menggambar Skala Ganda (Dalam: 0-90, Luar: 90-0)
+    function gambarSkala() {
+      const grupSkala = document.getElementById('garis-skala');
+      for (let i = 0; i <= 90; i += 5) {
+        let rad = i * Math.PI / 180;
+        let isMajor = (i % 10 === 0);
+        let panjang = isMajor ? 4 : 2;
+        // Koordinat Garis Skala
+        let x1 = 10 + 80 * Math.cos(rad);
+        let y1 = 90 - 80 * Math.sin(rad);
+        let x2 = 10 + (80 - panjang) * Math.cos(rad);
+        let y2 = 90 - (80 - panjang) * Math.sin(rad);
+        let garis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        garis.setAttribute('x1', x1);
+        garis.setAttribute('y1', y1);
+        garis.setAttribute('x2', x2);
+        garis.setAttribute('y2', y2);
+        garis.setAttribute('stroke', 'rgba(255,255,255,0.8)');
+        garis.setAttribute('stroke-width', '0.3');
+        grupSkala.appendChild(garis);
+        if (isMajor) {
+          // --- SKALA DALAM (0 sampai 90) ---
+          let xDalam = 10 + 72 * Math.cos(rad);
+          let yDalam = 90 - 72 * Math.sin(rad);
+          let teksDalam = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          teksDalam.setAttribute('x', xDalam);
+          teksDalam.setAttribute('y', yDalam);
+          teksDalam.setAttribute('fill', '#00ffcc');
+          teksDalam.setAttribute('font-size', '3');
+          teksDalam.setAttribute('text-anchor', 'middle');
+          teksDalam.setAttribute('dominant-baseline', 'central');
+          teksDalam.textContent = i;
+          grupSkala.appendChild(teksDalam);
+          // --- SKALA LUAR (90 sampai 0) ---
+          // Menggunakan radius 86 agar berada di luar garis busur (radius 80)
+          let xLuar = 10 + 86 * Math.cos(rad);
+          let yLuar = 90 - 86 * Math.sin(rad);
+          let teksLuar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          teksLuar.setAttribute('x', xLuar);
+          teksLuar.setAttribute('y', yLuar);
+          teksLuar.setAttribute('fill', '#ffcc00'); // Warna kuning agar kontras dengan skala dalam
+          teksLuar.setAttribute('font-size', '3');
+          teksLuar.setAttribute('text-anchor', 'middle');
+          teksLuar.setAttribute('dominant-baseline', 'central');
+          // Logika kebalikan: jika i=0 maka teks=90, jika i=90 maka teks=0
+          teksLuar.textContent = 90 - i;
+          grupSkala.appendChild(teksLuar);
+        }
+      }
+    }
+    // 3. Logika Membaca Sentuhan Jari dan Menghitung Sudut
+    function updateSudut(e) {
+      e.preventDefault(); // Mencegah perilaku default browser
+      // Mengambil koordinat sentuhan jari atau kursor mouse
+      let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      // Mendapatkan posisi dan ukuran elemen SVG di layar
+      let rect = svgArea.getBoundingClientRect();
+      // Menentukan titik pusat rotasi (Kiri bawah layar, sesuai viewBox 10,90)
+      let originX = rect.left + (rect.width * 0.10);
+      let originY = rect.top + (rect.height * 0.90);
+      // Menghitung jarak X dan Y dari pusat rotasi
+      let dx = clientX - originX;
+      let dy = originY - clientY; // y dibalik karena koordinat layar turun ke bawah
+      // Menghitung sudut menggunakan Arctangent (Atan2)
+      let sudut = Math.atan2(dy, dx) * (180 / Math.PI);
+      // Membatasi pergerakan hanya di kuadran 1 (0 - 90 derajat)
+      if (sudut < 0) sudut = 0;
+      if (sudut > 90) sudut = 90;
+      // Memperbarui teks di layar (dengan 1 angka desimal untuk kesan presisi)
+      teksSudut.innerText = sudut.toFixed(1) + "°";
+      // Memperbarui posisi garis merah menggunakan Trigonometri
+      let panjangJarum = 85; // Sedikit melewati batas lingkaran luar
+      let rad = sudut * Math.PI / 180;
+      let xJarum = 10 + panjangJarum * Math.cos(rad);
+      let yJarum = 90 - panjangJarum * Math.sin(rad);
+      jarum.setAttribute('x2', xJarum);
+      jarum.setAttribute('y2', yJarum);
+    }
+    // 4. Mendaftarkan Event Listener untuk interaksi
+    svgArea.addEventListener('touchstart', updateSudut, {
+      passive: false
+    });
+    svgArea.addEventListener('touchmove', updateSudut, {
+      passive: false
+    });
+    // (Opsional) Dukungan untuk kursor mouse jika dicoba di PC
+    svgArea.addEventListener('mousedown', (e) => {
+      updateSudut(e);
+      document.addEventListener('mousemove', updateSudut);
+      document.addEventListener('mouseup', () => {
+        document.removeEventListener('mousemove', updateSudut);
+      }, {
+        once: true
+      });
+    });
+    // Eksekusi fungsi saat halaman dimuat
+    mulaiKamera();
+    gambarSkala();
+  </script>
+</body>
+
+  </html>
